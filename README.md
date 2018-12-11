@@ -26,9 +26,8 @@ There are multiple ways to install the Qt module, sorted by preference:
 
 1. Package Managers: The library is available via:
 	- **Arch-Linux:** AUR-Repository: [`qt5-jsonserializer`](https://aur.archlinux.org/packages/qt5-jsonserializer/)
-	- **Ubuntu:** Launchpad-PPA:
-		- Artful: [ppa:skycoder42/qt-modules](https://launchpad.net/~skycoder42/+archive/ubuntu/qt-modules), package `libqt5jsonserializer[3/-dev]`
-		- Xenial: [ppa:skycoder42/qt-modules-opt](https://launchpad.net/~skycoder42/+archive/ubuntu/qt-modules-opt), package `qtjsonserializer`
+	- **Ubuntu Bionic:** Launchpad-PPA: [ppa:skycoder42/qt-modules](https://launchpad.net/~skycoder42/+archive/ubuntu/qt-modules), package `libqt5jsonserializer[3/-dev]`
+	- **Flatpak Module template:** [Skycoder42/deployment qtjsonserializer.json](https://github.com/Skycoder42/deployment/blob/master/flatpak/modules/qtjsonserializer/qtjsonserializer.json)
 	- **MacOs:**
 		- Tap: [`brew tap Skycoder42/qt-modules`](https://github.com/Skycoder42/homebrew-qt-modules)
 		- Package: `qtjsonserializer`
@@ -46,10 +45,13 @@ There are multiple ways to install the Qt module, sorted by preference:
 	- `qmake`
 	- `make qmake_all`
 	- `make`
+	- Optional steps:
+		- `make doxygen` to generate the documentation
+		- `make -j1 run-tests` to build and run all tests
 	- `make install`
 
 ## Usage
-The serializer is provided as a Qt module. Thus, all you have to do is install the module, and then, in your project, add `QT += jsonserializer` to your `.pro` file!
+The serializer is provided as a Qt module. Thus, all you have to do is install the module, and then, in your project, add `QT += jsonserializer` to your `.pro` file! The following chapters show an example and explain a few important details regarding the functionality and limits of the implementation.
 
 ### Example
 Both serialization and desertialization are rather simple. Create an object, and then use the serializer as follows:
@@ -61,17 +63,21 @@ class TestObject : public QObject
 	Q_OBJECT
 
 	Q_PROPERTY(QString stringProperty MEMBER stringProperty)
-	Q_PROPERTY(QList<int> simpeList MEMBER simpeList)
+	Q_PROPERTY(QList<int> simpleList MEMBER simpleList)
+	Q_PROPERTY(QMap<QString, double> simpleMap MEMBER simpleMap);  // add the semicolon or use a typedef to surpress most errors of the clang code model
 	Q_PROPERTY(TestObject* childObject MEMBER childObject)
 
 public:
 	Q_INVOKABLE TestObject(QObject *parent = nullptr);
 
 	QString stringProperty;
-	QList<int> simpeList;
+	QList<int> simpleList;
+	QMap<QString, double> simpleMap;
 	TestObject* childObject;
 }
 ```
+
+**Note:** If you want to use a typedef, read the [Support for using and typedef](#support-for-using-and-typedef) section first!
 
 You can serialize (and deserialize) the object with:
 ```cpp
@@ -81,7 +87,11 @@ try {
 	//serialize
 	auto object = new TestObject();
 	object->stringProperty = "test";
-	object->simpeList = {1, 2, 3};
+	object->simpleList = {1, 2, 3};
+	object->simpleMap = {
+		{"pi", 3.14},
+		{"e", 2.71}
+	};
 	object->childObject = new TestObject(object);
 	auto json = serializer->serialize(object);
 	qDebug() << json;
@@ -90,7 +100,8 @@ try {
 	//deserialize
 	object = serializer->deserialize<TestObject>(json);//optional: specify the parent
 	qDebug() << object->stringProperty
-			 << object->simpeList
+			 << object->simpleList
+			 << object->simpleMap
 			 << object->childObject;
 	delete object;
 } catch(QJsonSerializerException &e) {
@@ -102,10 +113,15 @@ For the serialization, the created json would look like this:
 ```json
 {
 	"stringProperty": "test",
-	"simpeList": [1, 2, 3],
+	"simpleList": [1, 2, 3],
+	"simpleMap": {
+		"pi": 3.14,
+		"e": 2.71
+	},
 	"childObject": {
 		"stringProperty": "",
-		"simpeList": [],
+		"simpleList": [],
+		"simpleMap": {},
 		"childObject": null
 	}
 }
@@ -114,32 +130,79 @@ For the serialization, the created json would look like this:
 ### Important Usage Hints
 In order for the serializer to properly work, there are a few things you have to know and do:
 
-1. Only Q_PROPERTY properties will be serialized, and of those only properties that are marked to be stored (see [The Property System](https://doc.qt.io/qt-5/properties.html#requirements-for-declaring-properties), STORED attribute)
-2. For deserialization of QObjects, they need an invokable constructor, that takes only a parent: `Q_INVOKABLE MyClass(QObject*);`
-3. Only the following types can be serialized:
+1. Only Q_PROPERTY properties of objects/gadgets will be serialized, and of those only properties that are marked to be stored (see [The Property System](https://doc.qt.io/qt-5/properties.html#requirements-for-declaring-properties), STORED attribute)
+2. For the deserialization of QObjects, they need an invokable constructor, that takes only a parent: `Q_INVOKABLE MyClass(QObject*);`
+3. The following types are explicitly supported:
 	- `QObject*` and deriving classes
-	- Classes/structs marked with `Q_GADGET` (as value types only!)
-	- `QList`, of any type that is serializable as well
+	- Classes/structs marked with `Q_GADGET` (as value or plain pointer only!)
+	- `QList<T>`, with T beeing any type that is serializable as well
 	- `QMap<QString, T>`, with T beeing any type that is serializable as well (string as key type is required)
 	- Simple types, that are supported by QJsonValue (See [QJsonValue::fromVariant](https://doc.qt.io/qt-5/qjsonvalue.html#fromVariant) and [QJsonValue::toVariant](https://doc.qt.io/qt-5/qjsonvalue.html#toVariant))
 	- `Q_ENUM` and `Q_FLAG` types, as integer or as string
 		- The string de/serialization of Q_ENUM and Q_FLAG types only works if used as a Q_PROPERTY. Integer will always work.
 	- `QJson...` types
-	- `QPair<T, T>`, of any types that are serializable as well
-	- Standard QtCore types (e.g. QPoint, QSize, QVersionNumber, ...)
-	- Any type you add yourself by extending the serializer
+	- `QPair<T1, T2>` and `std::pair<T1, T2>`, of any types that are serializable as well
+	- `std::tuple<TArgs...>`, of any types that are serializable as well
+	- Standard QtCore types (QByteArray, QUrl, QVersionNumber, QUuid, QPoint, QSize, QLine, QRect, QLocale, QRegularExpression)
+		- QByteArray is represented by a base64 encoded string
+	- Any type you add yourself by extending the serializer (See QJsonTypeConverter documentation)
 4. While simple types (i.e. `QList<int>`) are supported out of the box, for custom types (like `QList<TestObject*>`) you will have to register converters. This goes for
 	- QList and QMap: use `QJsonSerializer::registerAllConverters<T>()`
 	- QList only: use `QJsonSerializer::registerListConverters<T>()`
 	- QMap only: use `QJsonSerializer::registerMapConverters<T>()`
-	- QPair: use `QJsonSerializer::registerPairConverters<T1, T2>()`
+	- QPair and std::pair: use `QJsonSerializer::registerPairConverters<T1, T2>()`
+	- std::tuple: use `QJsonSerializer::registerTupleConverters<TArgs...>()`
 	- QSharedPointer/QPointer: use `QJsonSerializer::registerPointerConverters<T>()`
-5. Polymorphic QObjects are supported. This is done by the serializer via adding a special `@class` json property. To make a class polymorphic you can:
-	- Add `Q_CLASSINFO("polymorphic", "true")` to its definition
+5. Polymorphic QObjects are supported. This is done by the serializer via adding a special @@class json property. To make a class polymorphic you can:
+	- Add `Q_JSON_POLYMORPHIC(true)` (or `Q_CLASSINFO("polymorphic", "true")`) to its definition
 	- Globally force polyphormism (See QJsonSerializer::polymorphing in the doc)
 	- Set a dynamic property: `setProperty("__qt_json_serializer_polymorphic", true);`
 6. By default, the `objectName` property of QObjects is not serialized (See [keepObjectName](src/qjsonserializer.h#L20))
 7. By default, the JSON `null` can only be converted to QObjects. For other types the conversion fails (See [allowDefaultNull](src/qjsonserializer.h#L19))
+
+### Support for using and typedef
+Many converters on the serializer depends on beeing able to get the name of a specific type in order to be able to correctly serialize it. Especially when template types are used, this is required to get the type of the template parameters. This means that some typedefs will not work out of the box, if not correctly registered. This can become rather complicated, because the serializer depends on the somewhat complicated typedef handling of the Qt meta system. There are generally 2 kinds of typedefs described below.
+
+#### Implicit typedef support
+Implicit typedefs in this context are understood as typedefs that are registered within Qt using `qRegisterMetaType`. The important part here is that the original type name must be declared via `Q_DECLARE_METATYPE` and typedefs are then registered in Qt after that. A basic example would be a typedef for a custom class:
+
+```cpp
+class MyClass {};
+Q_DECLARE_METATYPE(MyClass)
+
+using MyTypedef = MyClass;
+
+qRegisterMetaType<MyClass>();
+qRegisterMetaType<MyClass>("MyTypedef");
+
+qDebug() << QMetaType::typeName(qMetaTypeId<MyTypedef>());
+//will print "MyClass", the original type name
+```
+
+Using such typedefs is completely safe, as Qt will internally resolve the correctly, i.e. declaring a property as `Q_PROPERTY(MyTypedef value ...)` will pass the `MyClass` MetaType to the serializer.
+
+However, this will not work for the case where a typedef is registered as the "original" type name. For these cases, you need the explicit typedefs.
+
+#### Explicit typedef support
+If you for example declare a metatype by a typedef'ed name, this name is considered the "real" name by Qt. The following example shows this for a custom map that is registered as typedef so that it can be used as property on older compilers:
+
+```cpp
+using MyMap = QMap<QString, MyType>;
+Q_DECLARE_METATYPE(MyMap);
+qRegisterMetaType<MyMap>();
+qRegisterMetaType<MyMap>("QMap<QString, MyType>");
+
+qDebug() << QMetaType::typeName(qMetaTypeId<QMap<QString, MyType>>());
+//will print "MyMap", making it impossible to get the value type
+```
+
+To solve this problem, it is possible to explicity register an "inverse typedef" using QJsonTypeConverter::registerInverseTypedef to tell the serializer what the original name of a given type is. This way the converters can get that typename using QJsonTypeConverter::getCanonicalTypeName instead of the registered one:
+
+```cpp
+QJsonTypeConverter::registerInverseTypedef<MyMap>("QMap<QString, MyType>");
+```
+
+The QJsonTypeConverter::getCanonicalTypeName method will now return "QMap<QString, MyType>" if "MyMap" is passed to it, and thus can correctly extract and use "MyType" as value for the serialization.
 
 ### Support for alternative Containers
 Right now, only `QList` and `QMap` ar supported as containers. The reason is, that adding containers requires the registration of converters. Supporting all containers would explode the generated binary, which is why I only support the most common ones.
@@ -150,7 +213,7 @@ If you need the other containers, you have 2 options:
 2. Create "converter" properties that are used for serialization only. This is the more simple version, but needs to be done for every occurance of that container, and adds some overhead.
 
 The following example shows how to do that to use `QVector` in code, but serialize as `QList`:
-```
+```cpp
 struct MyGadget {
 	Q_GADGET
 

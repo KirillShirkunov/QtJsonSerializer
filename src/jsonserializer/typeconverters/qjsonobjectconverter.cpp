@@ -99,8 +99,10 @@ QVariant QJsonObjectConverter::deserialize(int propertyType, const QJsonValue &v
 
 	//try to get the polymorphic metatype (if allowed)
 	auto jsonObject = value.toObject();
+	auto isPoly = false;
 	if(poly != QJsonSerializer::Disabled) {
 		if(jsonObject.contains(QStringLiteral("@class"))) {
+			isPoly = true;
 			QByteArray classField = jsonObject[QStringLiteral("@class")].toString().toUtf8() + "*";//add the star
 			auto typeId = QMetaType::type(classField.constData());
 			auto nMeta = QMetaType::metaObjectForType(typeId);
@@ -140,6 +142,9 @@ QVariant QJsonObjectConverter::deserialize(int propertyType, const QJsonValue &v
 
 	//now deserialize all json properties
 	for(auto it = jsonObject.constBegin(); it != jsonObject.constEnd(); it++) {
+		if(isPoly && it.key() == QStringLiteral("@class"))
+			continue;
+
 		auto propIndex = metaObject->indexOfProperty(qUtf8Printable(it.key()));
 		QVariant subValue;
 		if(propIndex != -1) {
@@ -166,7 +171,7 @@ QVariant QJsonObjectConverter::deserialize(int propertyType, const QJsonValue &v
 	return toVariant(object, QMetaType::typeFlags(propertyType));
 }
 
-const QMetaObject *QJsonObjectConverter::getMetaObject(int typeId)
+const QMetaObject *QJsonObjectConverter::getMetaObject(int typeId) const
 {
 	auto flags = QMetaType::typeFlags(typeId);
 	if(flags.testFlag(QMetaType::PointerToQObject))
@@ -183,7 +188,7 @@ const QMetaObject *QJsonObjectConverter::getMetaObject(int typeId)
 		}
 
 		//extract template type, and if found, add the pointer star and find the meta type
-		auto match = regex.match(QString::fromUtf8(QMetaType::typeName(typeId)));
+		auto match = regex.match(QString::fromUtf8(getCanonicalTypeName(typeId)));
 		if(match.hasMatch()) {
 			auto type = QMetaType::type(match.captured(1).toUtf8().trimmed() + "*");
 			return QMetaType::metaObjectForType(type);
@@ -193,7 +198,7 @@ const QMetaObject *QJsonObjectConverter::getMetaObject(int typeId)
 }
 
 template<typename T>
-T QJsonObjectConverter::extract(QVariant variant)
+T QJsonObjectConverter::extract(QVariant variant) const
 {
 	auto id = qMetaTypeId<T>();
 	if(variant.canConvert(id) && variant.convert(id))
@@ -205,7 +210,7 @@ T QJsonObjectConverter::extract(QVariant variant)
 	}
 }
 
-QVariant QJsonObjectConverter::toVariant(QObject *object, QMetaType::TypeFlags flags)
+QVariant QJsonObjectConverter::toVariant(QObject *object, QMetaType::TypeFlags flags) const
 {
 	if(flags.testFlag(QMetaType::PointerToQObject))
 		return QVariant::fromValue(object);
@@ -222,7 +227,7 @@ QVariant QJsonObjectConverter::toVariant(QObject *object, QMetaType::TypeFlags f
 	}
 }
 
-bool QJsonObjectConverter::polyMetaObject(QObject *object)
+bool QJsonObjectConverter::polyMetaObject(QObject *object) const
 {
 	auto meta = object->metaObject();
 

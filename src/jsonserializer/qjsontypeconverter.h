@@ -12,9 +12,10 @@ class QJsonTypeConverterPrivate;
 //! An interface to create custom serializer type converters
 class Q_JSONSERIALIZER_EXPORT QJsonTypeConverter
 {
+	Q_DISABLE_COPY(QJsonTypeConverter)
 public:
-	//! Sample values for a priority value
-	enum Priority : qint32 {
+	//! Sample values for a priority value (default converters are mostly Standard and are guaranteed to be between Low and High)
+	enum Priority : int {
 		ExtremlyLow = -0x00FFFFFF,
 		VeryLow = -0x0000FFFF,
 		Low = -0x000000FF,
@@ -27,8 +28,9 @@ public:
 	//! Helper class passed to the type converter by the serializer. Do not implement yourself
 	class Q_JSONSERIALIZER_EXPORT SerializationHelper
 	{
+		Q_DISABLE_COPY(SerializationHelper)
 	public:
-		//! Destructor
+		SerializationHelper();
 		virtual ~SerializationHelper();
 
 		//! Returns a property from the serializer
@@ -63,6 +65,10 @@ public:
 	virtual QJsonValue serialize(int propertyType, const QVariant &value, const SerializationHelper *helper) const = 0;
 	//! Called by the deserializer to serializer your given type
 	virtual QVariant deserialize(int propertyType, const QJsonValue &value, QObject *parent, const SerializationHelper *helper) const = 0;
+
+protected:
+	//! Returns the actual original typename of the given type
+	QByteArray getCanonicalTypeName(int propertyType) const;
 
 private:
 	QScopedPointer<QJsonTypeConverterPrivate> d;

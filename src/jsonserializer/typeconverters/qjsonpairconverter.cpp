@@ -3,11 +3,11 @@
 
 #include <QtCore/QJsonArray>
 
-const QRegularExpression QJsonPairConverter::pairTypeRegex(QStringLiteral(R"__(^QPair<\s*(.*?)\s*,\s*(.*?)\s*>$)__"));
+const QRegularExpression QJsonPairConverter::pairTypeRegex(QStringLiteral(R"__(^(?:QPair|std::pair)<\s*(.*?)\s*,\s*(.*?)\s*>$)__"));
 
 bool QJsonPairConverter::canConvert(int metaTypeId) const
 {
-	return pairTypeRegex.match(QString::fromUtf8(QMetaType::typeName(metaTypeId))).hasMatch();
+	return pairTypeRegex.match(QString::fromUtf8(getCanonicalTypeName(metaTypeId))).hasMatch();
 }
 
 QList<QJsonValue::Type> QJsonPairConverter::jsonTypes() const
@@ -46,9 +46,9 @@ QVariant QJsonPairConverter::deserialize(int propertyType, const QJsonValue &val
 	return QVariant::fromValue(vPair);
 }
 
-QPair<int, int> QJsonPairConverter::getPairTypes(int metaType)
+QPair<int, int> QJsonPairConverter::getPairTypes(int metaType) const
 {
-	auto match = pairTypeRegex.match(QString::fromUtf8(QMetaType::typeName(metaType)));
+	auto match = pairTypeRegex.match(QString::fromUtf8(getCanonicalTypeName(metaType)));
 	if(match.hasMatch()) {
 		QPair<int, int> types;
 		types.first = QMetaType::type(match.captured(1).toUtf8().trimmed());

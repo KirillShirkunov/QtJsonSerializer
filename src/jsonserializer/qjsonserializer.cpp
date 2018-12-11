@@ -18,10 +18,11 @@
 #include "typeconverters/qjsongeomconverter_p.h"
 #include "typeconverters/qjsonlocaleconverter_p.h"
 #include "typeconverters/qjsonregularexpressionconverter_p.h"
+#include "typeconverters/qjsonstdtupleconverter_p.h"
 
 QJsonSerializer::QJsonSerializer(QObject *parent) :
-	QObject(parent),
-	d(new QJsonSerializerPrivate())
+	QObject{parent},
+	d{new QJsonSerializerPrivate{}}
 {}
 
 QJsonSerializer::~QJsonSerializer() = default;
@@ -210,7 +211,7 @@ QJsonValue QJsonSerializer::serializeVariant(int propertyType, const QVariant &v
 {
 	auto converter = d->typeConverterTypeCache.value(propertyType, nullptr);
 	if(!converter){
-		for(auto c : d->typeConverters) {
+		for(const auto &c : qAsConst(d->typeConverters)) {
 			if(c && c->canConvert(propertyType)) {
 				converter = c;
 				d->typeConverterTypeCache.insert(propertyType, converter);
@@ -231,7 +232,7 @@ QVariant QJsonSerializer::deserializeVariant(int propertyType, const QJsonValue 
 	if(!converter || !converter->jsonTypes().contains(value.type())) {
 		converter = nullptr; //in case json type did not match
 		auto valueType = value.type();
-		for(auto c : d->typeConverters) {
+		for(const auto &c : qAsConst(d->typeConverters)) {
 			if(c &&
 			   c->jsonTypes().contains(valueType) &&
 			   c->canConvert(propertyType)) {
@@ -250,10 +251,16 @@ QVariant QJsonSerializer::deserializeVariant(int propertyType, const QJsonValue 
 
 	if(propertyType != QMetaType::UnknownType) {
 		auto vType = variant.typeName();
-		if(variant.canConvert(propertyType) && variant.convert(propertyType))
+
+		// exclude special values that can convert from null, but should not do so
+		auto allowConvert = true;
+		if(propertyType == QMetaType::QString && value.isNull())
+			allowConvert = false;
+
+		if(allowConvert && variant.canConvert(propertyType) && variant.convert(propertyType))
 			return variant;
 		else if(d->allowNull && value.isNull())
-			return QVariant();
+			return QVariant{propertyType, nullptr};
 		else {
 			throw QJsonDeserializationException(QByteArray("Failed to convert deserialized variant of type ") +
 												(vType ? vType : "<unknown>") +
@@ -271,7 +278,7 @@ QJsonValue QJsonSerializer::serializeValue(int propertyType, const QVariant &val
 		return QJsonValue();
 	else {
 		if(value.userType() == QMetaType::QJsonValue)//value needs special treatment
-			return value.value<QJsonValue>();
+			return value.toJsonValue();
 
 		auto json = QJsonValue::fromVariant(value);
 		if(json.isNull()) { //special types where a null json is valid, and corresponds to a different
@@ -436,20 +443,25 @@ QByteArray QJsonSerializer::serializeToImpl(const QVariant &data, QJsonDocument:
 	return buffer.data();
 }
 
+void QJsonSerializer::registerInverseTypedefImpl(int typeId, const char *normalizedTypeName)
+{
+	QWriteLocker lock{&QJsonSerializerPrivate::typedefLock};
+	QJsonSerializerPrivate::typedefMapping.insert(typeId, normalizedTypeName);
+}
 
+
+
+QReadWriteLock QJsonSerializerPrivate::typedefLock;
+QHash<int, QByteArray> QJsonSerializerPrivate::typedefMapping;
+
+QByteArray QJsonSerializerPrivate::getTypeName(int propertyType)
+{
+	QReadLocker lock{&typedefLock};
+	return typedefMapping.value(propertyType, QMetaType::typeName(propertyType));
+}
 
 QJsonSerializerPrivate::QJsonSerializerPrivate() :
-	allowNull(false),
-	keepObjectName(false),
-	enumAsString(false),
-	validateBase64(true),
-	useBcp47Locale(true),
-	validationFlags(QJsonSerializer::StandardValidation),
-	polymorphing(QJsonSerializer::Enabled),
-	typeConverters({
-		//prio 1
-		QSharedPointer<QJsonLocaleConverter>::create(),
-		//prio 0
+	typeConverters{
 		QSharedPointer<QJsonObjectConverter>::create(),
 		QSharedPointer<QJsonGadgetConverter>::create(),
 		QSharedPointer<QJsonMapConverter>::create(),
@@ -464,7 +476,8 @@ QJsonSerializerPrivate::QJsonSerializerPrivate() :
 		QSharedPointer<QJsonPointConverter>::create(),
 		QSharedPointer<QJsonLineConverter>::create(),
 		QSharedPointer<QJsonRectConverter>::create(),
-		QSharedPointer<QJsonRegularExpressionConverter>::create()
-	}),
-	typeConverterTypeCache()
+		QSharedPointer<QJsonLocaleConverter>::create(),
+		QSharedPointer<QJsonRegularExpressionConverter>::create(),
+		QSharedPointer<QJsonStdTupleConverter>::create()
+	}
 {}
