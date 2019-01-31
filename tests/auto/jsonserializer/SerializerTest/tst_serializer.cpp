@@ -54,7 +54,8 @@ void SerializerTest::initTestCase()
 	QJsonSerializer::registerListConverters<QList<int>>();
 	QJsonSerializer::registerMapConverters<QMap<QString, int>>();
 
-	QJsonSerializer::registerAllConverters<TestGadget>();
+	QJsonSerializer::registerListConverters<TestGadget>();
+	QJsonSerializer::registerMapConverters<TestGadget>();
 	QJsonSerializer::registerListConverters<CustomGadget>();
 	QJsonSerializer::registerListConverters<QList<TestGadget>>();
 	QJsonSerializer::registerMapConverters<QMap<QString, TestGadget>>();
@@ -551,8 +552,8 @@ void SerializerTest::resetProps()
 	serializer->setEnumAsString(false);
 	serializer->setValidateBase64(true);
 	serializer->setUseBcp47Locale(true);
-	serializer->setValidationFlags(QJsonSerializer::StandardValidation);
-	serializer->setPolymorphing(QJsonSerializer::Enabled);
+	serializer->setValidationFlags(QJsonSerializer::ValidationFlag::StandardValidation);
+	serializer->setPolymorphing(QJsonSerializer::Polymorphing::Enabled);
 }
 
 namespace  {

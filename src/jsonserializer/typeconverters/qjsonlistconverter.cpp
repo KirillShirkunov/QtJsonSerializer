@@ -3,7 +3,7 @@
 
 #include <QtCore/QJsonArray>
 
-const QRegularExpression QJsonListConverter::listTypeRegex(QStringLiteral(R"__(^QList<\s*(.*?)\s*>$)__"));
+const QRegularExpression QJsonListConverter::listTypeRegex(QStringLiteral(R"__(^(?:QList|QLinkedList|QVector|QStack|QQueue|QSet)<\s*(.*?)\s*>$)__"));
 
 bool QJsonListConverter::canConvert(int metaTypeId) const
 {
@@ -25,7 +25,7 @@ QJsonValue QJsonListConverter::serialize(int propertyType, const QVariant &value
 	if(!cValue.convert(QVariant::List)) {
 		throw QJsonSerializationException(QByteArray("Failed to convert type ") +
 										  QMetaType::typeName(propertyType) +
-										  QByteArray(" to a variant list. Make shure to register list types via QJsonSerializer::registerListConverters"));
+										  QByteArray(" to a variant list. Make shure to register list types via QJsonSerializer::registerListConverters (or QJsonSerializer::registerSetConverters)"));
 	}
 
 	QJsonArray array;
@@ -42,7 +42,7 @@ QVariant QJsonListConverter::deserialize(int propertyType, const QJsonValue &val
 	//generate the list
 	QVariantList list;
 	auto index = 0;
-	for(auto element : value.toArray())
+	for(const auto element : value.toArray())
 		list.append(helper->deserializeSubtype(metaType, element, parent, "[" + QByteArray::number(index++) + "]"));
 	return list;
 }

@@ -7,6 +7,7 @@
 #include <QtCore/qmetaobject.h>
 #include <QtCore/qjsonvalue.h>
 #include <QtCore/qvariant.h>
+#include <QtCore/qsharedpointer.h>
 
 class QJsonTypeConverterPrivate;
 //! An interface to create custom serializer type converters
@@ -73,5 +74,46 @@ protected:
 private:
 	QScopedPointer<QJsonTypeConverterPrivate> d;
 };
+
+//! A factory interface to create instances of QJsonTypeConverters
+class Q_JSONSERIALIZER_EXPORT QJsonTypeConverterFactory
+{
+	Q_DISABLE_COPY(QJsonTypeConverterFactory)
+
+public:
+	QJsonTypeConverterFactory();
+	virtual ~QJsonTypeConverterFactory();
+
+	//! @copydoc QJsonTypeConverter::priority
+	int priority() const;
+	//! @copydoc QJsonTypeConverter::canConvert
+	bool canConvert(int metaTypeId) const;
+	//! @copydoc QJsonTypeConverter::jsonTypes
+	QList<QJsonValue::Type> jsonTypes() const;
+
+	//! The primary factory method to create converters
+	virtual QSharedPointer<QJsonTypeConverter> createConverter() const = 0;
+
+private:
+	mutable QSharedPointer<const QJsonTypeConverter> _statusConverter;
+};
+
+//! A template implementation of QJsonTypeConverterFactory to generically create simply converters
+template <typename TConverter, int Priority = QJsonTypeConverter::Priority::Standard>
+class QJsonTypeConverterStandardFactory : public QJsonTypeConverterFactory
+{
+public:
+	QSharedPointer<QJsonTypeConverter> createConverter() const override;
+};
+
+// ------------- GENERIC IMPLEMENTATION -------------
+
+template<typename TConverter, int Priority>
+QSharedPointer<QJsonTypeConverter> QJsonTypeConverterStandardFactory<TConverter, Priority>::createConverter() const
+{
+	auto converter = QSharedPointer<TConverter>::create();
+	converter->setPriority(Priority);
+	return converter;
+}
 
 #endif // QJSONTYPECONVERTER_H
