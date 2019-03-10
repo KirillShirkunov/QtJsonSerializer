@@ -21,6 +21,8 @@
 #include <QtCore/qlinkedlist.h>
 #include <QtCore/qvector.h>
 #include <QtCore/qset.h>
+#include <QtCore/qqueue.h>
+#include <QtCore/qstack.h>
 #include <QtCore/qhash.h>
 #include <QtCore/qmap.h>
 
@@ -49,7 +51,7 @@ class Q_JSONSERIALIZER_EXPORT QJsonSerializer : public QObject, protected QJsonT
 
 public:
 	//! Flags to specify how strict the serializer should validate when deserializing
-	enum class ValidationFlag {
+	enum ValidationFlag {
 		StandardValidation = 0x00, //!< Do not perform extra validation, only make sure types are valid and compatible
 		NoExtraProperties = 0x01, //!< Make sure the json does not contain any properties that are not in the type to deserialize it to
 		AllProperties = 0x02, //!< Make sure all properties of the type have a value in the deserialized json data
@@ -59,7 +61,7 @@ public:
 	Q_FLAG(ValidationFlags)
 
 	//! Enum to specify the modes of polymorphism
-	enum class Polymorphing {
+	enum Polymorphing {
 		Disabled, //!< Do not serialize polymorphic and ignore information about classes in json
 		Enabled, //!< Use polymorphism where declared by the classes/json
 		Forced //!< Treat every object polymorphic, and required the class information to be present in json
@@ -134,9 +136,13 @@ public:
 	//! Serializers a QVariant value to a QJsonValue
 	QJsonValue serialize(const QVariant &data) const;
 	//! Serializers a QVariant value to a device
-	void serializeTo(QIODevice *device, const QVariant &data, QJsonDocument::JsonFormat format = QJsonDocument::Indented) const;
+	void serializeTo(QIODevice *device, const QVariant &data) const; //MAJOR join as overload
+	//! @copybrief QJsonSerializer::serializeTo(QIODevice *, const QVariant &) const
+	void serializeTo(QIODevice *device, const QVariant &data, QJsonDocument::JsonFormat format) const;
 	//! Serializers a QVariant value to a byte array
-	QByteArray serializeTo(const QVariant &data, QJsonDocument::JsonFormat format = QJsonDocument::Indented) const;
+	QByteArray serializeTo(const QVariant &data) const; //MAJOR join as overload
+	//! @copybrief QJsonSerializer::serializeTo(const QVariant &) const
+	QByteArray serializeTo(const QVariant &data, QJsonDocument::JsonFormat format) const;
 
 	//! Serializers a QObject, Q_GADGET or a list of one of those to json
 	template <typename T>
@@ -175,7 +181,9 @@ public:
 	template <typename T>
 	void addJsonTypeConverter();
 	//! @copybrief QJsonSerializer::addJsonTypeConverter()
-	void addJsonTypeConverter(const QSharedPointer<QJsonTypeConverter> &converter);
+	void addJsonTypeConverter(QSharedPointer<QJsonTypeConverter> converter);
+	//! @private
+	QT_DEPRECATED void addJsonTypeConverter(QJsonTypeConverter *converter);
 
 public Q_SLOTS:
 	//! @writeAcFn{QJsonSerializer::allowDefaultNull}
@@ -196,13 +204,21 @@ public Q_SLOTS:
 	void setMultiMapMode(MultiMapMode multiMapMode);
 
 Q_SIGNALS:
+	//! @notifyAcFn{QJsonSerializer::allowDefaultNull}
 	void allowDefaultNullChanged(bool allowDefaultNull);
+	//! @notifyAcFn{QJsonSerializer::keepObjectName}
 	void keepObjectNameChanged(bool keepObjectName);
+	//! @notifyAcFn{QJsonSerializer::enumAsString}
 	void enumAsStringChanged(bool enumAsString);
+	//! @notifyAcFn{QJsonSerializer::validateBase64}
 	void validateBase64Changed(bool validateBase64);
+	//! @notifyAcFn{QJsonSerializer::useBcp47Locale}
 	void useBcp47LocaleChanged(bool useBcp47Locale);
+	//! @notifyAcFn{QJsonSerializer::validationFlags}
 	void validationFlagsChanged(ValidationFlags validationFlags);
+	//! @notifyAcFn{QJsonSerializer::polymorphing}
 	void polymorphingChanged(Polymorphing polymorphing);
+	//! @notifyAcFn{QJsonSerializer::multiMapMode}
 	void multiMapModeChanged(MultiMapMode multiMapMode);
 
 protected:
@@ -223,14 +239,16 @@ private:
 	QJsonValue serializeValue(int propertyType, const QVariant &value) const;
 	QVariant deserializeValue(int propertyType, const QJsonValue &value) const;
 
-	QJsonValue serializeEnum(QMetaEnum metaEnum, const QVariant &value) const;
-	QVariant deserializeEnum(QMetaEnum metaEnum, const QJsonValue &value) const;
+	QJsonValue serializeEnum(const QMetaEnum &metaEnum, const QVariant &value) const;
+	QVariant deserializeEnum(const QMetaEnum &metaEnum, const QJsonValue &value) const;
 
 	void writeToDevice(const QJsonValue &data, QIODevice *device, QJsonDocument::JsonFormat format) const;
 	QJsonValue readFromDevice(QIODevice *device) const;
 
 	QJsonValue serializeImpl(const QVariant &data) const;
+	QT_DEPRECATED void serializeToImpl(QIODevice *device, const QVariant &data) const; //MAJOR remove
 	void serializeToImpl(QIODevice *device, const QVariant &data, QJsonDocument::JsonFormat format) const;
+	QT_DEPRECATED QByteArray serializeToImpl(const QVariant &data) const; //MAJOR remove
 	QByteArray serializeToImpl(const QVariant &data, QJsonDocument::JsonFormat format) const;
 
 	static void registerInverseTypedefImpl(int typeId, const char *normalizedTypeName);
